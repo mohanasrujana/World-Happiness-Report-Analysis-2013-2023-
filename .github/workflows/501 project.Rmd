@@ -1,0 +1,233 @@
+---
+title: "Stats 501 Project"
+author: "Harshita Vidapanakal, Satya Srujana Pilli"
+date: "2024-12-15"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2) 
+install.packages("GGally") 
+library(GGally)
+library(dplyr)
+library(corrplot)
+install.packages("countrycode")
+library(countrycode)
+getwd()
+```
+
+## World Happiness Report Analysis (2013-2023)
+
+### Loading the dataset
+
+```{r load-dataset}
+# Load your data
+
+data <- read.csv("~/Downloads/World Happiness Report Combined_v6.csv")
+
+numeric_cols <- c("Year", "Social.Support", "Freedom",
+"Perceptions.of.corruption", "Generosity", "Economy..GDP.per.Capita.",
+"Healthy.life.expectancy", "Happiness.Score", "Dystopia.Residual")
+
+# Create a subset of the data with only numeric columns
+
+numeric_data <- data[, numeric_cols]
+```
+
+### Correlation analysis
+
+```{r Q1}
+# Compute the correlation matrix
+
+cor_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Print the correlation matrix
+
+print(cor_matrix)
+
+# Create a correlation plot
+
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust",
+tl.col = "black", tl.srt = 45)  
+
+# Adjust label size if needed
+cor_matrix_clean <- replace(cor_matrix, is.na(cor_matrix) |
+is.infinite(cor_matrix), 0)
+
+corrplot(cor_matrix_clean, method = "color", type = "upper", order =
+"hclust", tl.col = "black", tl.srt = 45)
+
+cor_matrix_clean
+```
+
+```{r q1_assumptions}
+# Check linearity using scatterplots
+pairs(numeric_data)
+
+# Check normality for key variables
+shapiro.test(numeric_data$Happiness.Score)
+shapiro.test(numeric_data$Healthy.life.expectancy)
+
+# Visualize normality
+hist(numeric_data$Happiness.Score, main = "Histogram of Happiness Scores")
+hist(numeric_data$Healthy.life.expectancy, main = "Histogram of Life Expectancy")
+
+# Check for outliers
+boxplot(numeric_data$Happiness.Score, main = "Boxplot of Happiness Score")
+```
+
+### 95% confidence interval for mean happiness scores across regions
+
+```{r Q2}
+n <- length(data$Happiness.Score)
+mean_x <- mean(data$Happiness.Score) 
+se <- sd(data$Happiness.Score) /sqrt(n) 
+t_value <- qt(0.975, df = n - 1)
+
+ci_lower <- mean_x - t_value * se 
+ci_lower 
+ci_upper <- mean_x + t_value * se 
+ci_upper
+
+# Print the result
+cat("95% Confidence Interval for Mean Happiness Score:\n")
+cat("Mean:", round(mean_x, 4), "\n")
+cat("95% CI: [", round(ci_lower, 4), ", ", round(ci_upper, 4), "]\n", sep = "")
+
+```
+
+### Hypothesis testing 
+
+```{r Q3}
+# Define high and low GDP threshold (median GDP in this case)
+
+gdp_threshold <- median(data$Economy..GDP.per.Capita.)
+
+# Create a new column to categorize countries as high or low GDP
+
+data$GDP_Category <- ifelse(data$Economy..GDP.per.Capita. >=
+gdp_threshold, "High", "Low")
+
+# Perform t-test
+
+t_test_result <- t.test(Happiness.Score ~ GDP_Category, data = data)
+
+# Print t-test results
+
+print(t_test_result)
+
+# Calculate and print means for each group 
+group_means <- data %>%
+  group_by(GDP_Category) %>%
+  summarise(Mean_Happiness = mean(Happiness.Score, na.rm = TRUE))
+
+# Print the result
+print(group_means)
+
+print(group_means)
+
+# Visualize the results
+
+boxplot(Happiness.Score ~ GDP_Category, data = data, main = "Happiness
+Scores: High vs Low GDP Countries", ylab = "Happiness Score", xlab =
+"GDP Category")
+
+```
+
+
+### Trend analysis using linear regression
+```{r Q4}
+# Calculate yearly average happiness scores
+
+yearly_avg <- data %>% 
+  group_by(Year) %>% 
+  summarise(Avg_Happiness = mean(Happiness.Score, na.rm = TRUE))
+
+# Fit a linear regression model
+
+trend_model <- lm(Avg_Happiness ~ Year, data = yearly_avg)
+
+# Print summary of the model
+
+summary(trend_model)
+
+# Visualize the trend with a regression line
+
+ggplot(yearly_avg, aes(x = Year, y = Avg_Happiness)) + geom_point(color
+= "blue", size = 3) + geom_smooth(method = "lm", se = TRUE, color =
+"red") + labs(title = "Trend of Global Average Happiness Scores
+(2013-2023)", x = "Year", y = "Average Happiness Score") +
+theme_minimal() +
+  scale_x_continuous(breaks = seq(min(yearly_avg$Year), max(yearly_avg$Year), 1)) 
+```
+
+### One-way ANOVA
+```{r Q5}
+# Add a Continent column based on the Country column
+data$Continent <- countrycode(data$Country, origin = "country.name", destination = "continent")
+
+# Remove rows with NA values in 'Happiness.Score' and 'Continent' columns
+data_clean <- data %>%
+  filter(!is.na(Happiness.Score) & !is.na(Continent))
+
+# Perform one-way ANOVA 
+anova_result <- aov(Happiness.Score ~ Continent, data = data_clean)
+
+# Print ANOVA summary
+summary(anova_result)
+
+# Calculate mean happiness scores for each continent
+continent_means <- data_clean %>%
+  group_by(Continent) %>%
+  summarise(Mean_Happiness = mean(Happiness.Score, na.rm = TRUE))
+
+print(continent_means)
+
+# Visualize the differences using a boxplot
+ggplot(data_clean, aes(x = Continent, y = Happiness.Score, fill = Continent)) + 
+  geom_boxplot() + 
+  labs(title = "Happiness Scores Across Continents", 
+       x = "Continent", 
+       y = "Happiness Score") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+```
+
+```{r Q5_Assumptions}
+##Independence
+
+ggplot(data_clean, aes(x = Continent, y = Happiness.Score, fill = Continent)) + 
+  geom_boxplot() + 
+  labs(title = "Variance Check: Happiness Scores Across Continents", 
+       x = "Continent", 
+       y = "Happiness Score") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+##Normality 
+
+residuals_anova <- residuals(anova_result)
+
+#Shapiro-Wilk test
+shapiro_test <- shapiro.test(residuals_anova)
+print(shapiro_test)
+
+#Q-Q plot
+qqnorm(residuals_anova)
+qqline(residuals_anova, col = "red")
+
+##Homogeniety of Variances
+install.packages("car")
+library(car)
+
+#Levene's test
+levene_test <- leveneTest(Happiness.Score ~ Continent, data = data_clean)
+print(levene_test)
+```
+
+
